@@ -1,0 +1,79 @@
+---
+- name: This task is to collect target volume junction path from a particular SVM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    # Collect details from target_vserver
+    - name: Fetch list of volumes on target_vserver
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes?svm.name={{ target_vserver }}&fields=name,uuid"
+        method: GET
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: target_volumes_result
+      ignore_errors: true
+
+    - name: Debug target volume fetch results
+      debug:
+        var: target_volumes_result
+
+    - name: Extract target volume UUIDs and names, excluding 'root' and 'vsrv'
+      set_fact:
+        target_volumes: "{{ target_volumes_result.json.records | reject('search', 'root') | reject('search', 'vsrv') | list }}"
+
+    - name: Debug filtered target volumes
+      debug:
+        var: target_volumes
+
+    - name: Initialize list to store detailed target volume information
+      set_fact:
+        target_detailed_volumes: []
+
+    - name: Fetch detailed information for each target volume
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes/{{ item.uuid }}?fields=name,nas.path"
+        method: GET
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      loop: "{{ target_volumes }}"
+      loop_control:
+        loop_var: item
+      register: target_volume_details
+      ignore_errors: true
+
+    - name: Append detailed information to target volume list
+      set_fact:
+        target_detailed_volumes: >-
+          {{
+            target_detailed_volumes + [
+              {
+                'href': item.json._links.self.href,
+                'name': item.json.name,
+                'uuid': item.json.uuid,
+                
+              }
+            ]
+          }}
+      loop: "{{ target_volume_details.results }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug detailed target volume information
+      debug:
+        var: target_detailed_volumes
+
+    - name: Store detailed target volume information in a file
+      copy:
+        content: |
+          target_volume_path:
+          {{ target_detailed_volumes | to_nice_yaml }}
+        dest: collected_target_volume_junction_path.yml

@@ -1,0 +1,72 @@
+---
+- name: Pause SnapMirror relationships and ensure they are paused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Load SnapMirror details from file
+      slurp:
+        src: collected_snapmirror_dr_status.yml
+      register: snapmirror_file
+
+    - name: Decode SnapMirror details from base64
+      set_fact:
+        snapmirror_data: "{{ snapmirror_file.content | b64decode | from_yaml }}"
+
+    - name: Extract SnapMirror details
+      set_fact:
+        snapmirror_details: "{{ snapmirror_data['SnapMirror Details'] }}"
+
+    - name: Debug loaded SnapMirror details
+      debug:
+        var: snapmirror_details
+
+    - name: Pause SnapMirror relationships
+      uri:
+        url: "https://{{ target_host }}{{ item._links.self.href }}"
+        method: PATCH
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        body:
+          state: "paused"
+        body_format: json
+      loop: "{{ snapmirror_details }}"
+      register: pause_results
+      ignore_errors: true
+
+    - name: Debug pause results
+      debug:
+        var: pause_results
+
+    - name: Wait for SnapMirror relationships to be paused
+      uri:
+        url: "https://{{ target_host }}/api/snapmirror/relationships"
+        method: GET
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: snapmirror_status
+      until: >
+        snapmirror_status.json.records | selectattr('state', 'equalto', 'paused') | list | length == snapmirror_status.json.records | length
+      retries: 5
+      delay: 60
+
+    - name: Debug SnapMirror status after wait
+      debug:
+        var: snapmirror_status
+
+    - name: Store the results in dr_quiesce.yml
+      copy:
+        content: |
+          SnapMirror Pause Results:
+          {{ pause_results | to_nice_yaml }}
+          SnapMirror Status After Wait:
+          {{ snapmirror_status | to_nice_yaml }}
+        dest: collected_snapmirror_dr_quiesce.yml

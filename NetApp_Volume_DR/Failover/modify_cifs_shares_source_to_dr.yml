@@ -1,0 +1,56 @@
+---
+- name: Modify collected_cifs_share_source_to_dr.yml
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars.yml
+    
+  vars:
+    collected_cifs_shares_file: "collected_cifs_shares.yml"
+    collected_cifs_share_source_to_dr_file: "collected_cifs_share_source_to_dr.yml"
+
+  tasks:
+    # Step 1: Collect source_vserver uuid and target_vserver
+    - name: Get UUID of source vserver (svm1_cluster1)
+      uri:
+        url: "https://{{ source_host }}/api/svm/svms?name={{ source_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: source_svm_info
+
+    - name: Get UUID of target vserver (dr_svm)
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: target_svm_info
+
+    - name: Set source and target SVM UUID facts
+      set_fact:
+        source_svm_uuid: "{{ source_svm_info.json.records[0].uuid }}"
+        target_svm_uuid: "{{ target_svm_info.json.records[0].uuid }}"
+
+    # Step 2: Copy collected_cifs_shares.yml to collected_cifs_share_source_to_dr.yml
+    - name: Copy collected_cifs_shares.yml to collected_cifs_share_source_to_dr.yml
+      command: cp "{{ collected_cifs_shares_file }}" "{{ collected_cifs_share_source_to_dr_file }}"
+
+    # Step 3: Replace source_vserver name with target_vserver name in collected_cifs_share_source_to_dr.yml
+    - name: Replace source vserver name with target vserver name in collected_cifs_share_source_to_dr.yml
+      replace:
+        path: "{{ collected_cifs_share_source_to_dr_file }}"
+        regexp: "{{ source_vserver }}"
+        replace: "{{ target_vserver }}"
+
+    # Step 4: Replace source_vserver uuid with target_vserver uuid in collected_cifs_share_source_to_dr.yml
+    - name: Replace source vserver uuid with target vserver uuid in collected_cifs_share_source_to_dr.yml
+      replace:
+        path: "{{ collected_cifs_share_source_to_dr_file }}"
+        regexp: "{{ source_svm_uuid }}"
+        replace: "{{ target_svm_uuid }}"

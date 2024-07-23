@@ -1,0 +1,52 @@
+---
+- name: Resync SnapMirror relationships
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Load SnapMirror details from file
+      slurp:
+        src: collected_snapmirror_target_status.yml
+      register: snapmirror_file
+
+    - name: Decode SnapMirror details from base64
+      set_fact:
+        snapmirror_data: "{{ snapmirror_file.content | b64decode | from_yaml }}"
+
+    - name: Extract SnapMirror details
+      set_fact:
+        snapmirror_details: "{{ snapmirror_data['SnapMirror Details'] }}"
+
+    - name: Debug loaded SnapMirror details
+      debug:
+        var: snapmirror_details
+
+    - name: Resync SnapMirror relationships
+      uri:
+        url: "https://{{ target_host }}{{ item._links.self.href }}"
+        method: PATCH
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        body:
+          state: "snapmirrored"
+        body_format: json
+      loop: "{{ snapmirror_details }}"
+      register: resync_results
+      ignore_errors: true
+
+    - name: Debug pause results
+      debug:
+        var: resync_results
+
+    - name: Store the results in dr_quiesce.yml
+      copy:
+        content: |
+          SnapMirror resync Results:
+          {{ resync_results | to_nice_yaml }}
+        dest: collected_resync_target_snapmirror.yml

@@ -1,0 +1,78 @@
+---
+- name: Break SnapMirror relationships if state is quiesced
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Load SnapMirror details from file
+      slurp:
+        src: collected_snapmirror_dr_status.yml
+      register: snapmirror_file
+
+    - name: Decode SnapMirror details from base64
+      set_fact:
+        snapmirror_data: "{{ snapmirror_file.content | b64decode | from_yaml }}"
+
+    - name: Extract SnapMirror details
+      set_fact:
+        snapmirror_details: "{{ snapmirror_data['SnapMirror Details'] }}"
+
+    - name: Debug loaded SnapMirror details
+      debug:
+        var: snapmirror_details
+
+    # - name: Filter SnapMirror relationships that are quiesced
+    #   set_fact:
+    #     quiesced_snapmirrors: "{{ snapmirror_details | selectattr('state', 'equalto', 'quiesced') | list }}"
+
+    # - name: Debug quiesced SnapMirror relationships
+    #   debug:
+    #     var: quiesced_snapmirrors
+
+    - name: Check SnapMirror state and wait if not quiesced
+      uri:
+        url: "https://{{ target_host }}/api/snapmirror/relationships"
+        method: GET
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: snapmirror_status
+      until: >
+        snapmirror_status.json.records | selectattr('state', 'equalto', 'paused') | list | length > 0
+      retries: 5
+      delay: 60
+
+    - name: Debug SnapMirror status after wait
+      debug:
+        var: snapmirror_status
+
+    - name: Break SnapMirror relationships that are quiesced
+      uri:
+        url: "https://{{ target_host }}{{ item._links.self.href }}"
+        method: PATCH
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        body:
+          state: "broken_off"
+        body_format: json
+      loop: "{{ snapmirror_details }}"
+      register: break_results
+      ignore_errors: true
+
+    - name: Debug break results
+      debug:
+        var: break_results
+
+    - name: Store the results in dr_break.yml
+      copy:
+        content: |
+          SnapMirror Break Results:
+          {{ break_results | to_nice_yaml }}
+        dest: collected_snapmirror_dr_break.yml

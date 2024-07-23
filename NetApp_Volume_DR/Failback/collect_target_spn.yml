@@ -1,0 +1,27 @@
+---
+- name: Backup SPN entries 
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Retrieve SPN entries
+      command: >
+        ldapsearch -H ldap://{{ ad_domain }} -x -D "{{ ad_domain_user }}@{{ ad_domain }}" -w "{{ ad_domain_password }}"
+        -b "dc={{ ad_domain.split('.') | join(',dc=') }}" "(servicePrincipalName=*{{ spn_dns_name }}*)" -LLL
+      register: spn_output
+
+    - name: Save SPN entries to a file
+      copy:
+        content: |
+         {% for line in spn_output.stdout.split('\n') %}
+         {% if line.startswith('dn: ') %}
+         {{ line }}
+         changetype: modify
+         add: servicePrincipalName
+         {% elif line.startswith('servicePrincipalName: ') %}
+         {{ line }}
+         {% endif %}
+         {% endfor %}
+        dest: "collected_target_spn.ldif"

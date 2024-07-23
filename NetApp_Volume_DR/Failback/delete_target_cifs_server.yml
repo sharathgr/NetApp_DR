@@ -1,0 +1,34 @@
+---
+- name: Collect and modify CIFS server information
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Get UUID of target Vserver
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: no
+      register: target_vserver_info
+
+    - name: Set target_vserver UUID
+      set_fact:
+        target_vserver_uuid: "{{ target_vserver_info.json.records[0].uuid }}"
+
+    - name: Delete CIFS server from target Vserver
+      uri:
+        url: "https://{{ target_host }}/api/protocols/cifs/services/{{ target_vserver_info.json.records[0].uuid }}"
+        method: DELETE
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          ad_domain.user: "{{ ad_domain_user }}"
+          ad_domain.password: "{{ ad_domain_password }}"
+          force: true
+        validate_certs: false

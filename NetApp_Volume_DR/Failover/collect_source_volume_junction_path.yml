@@ -1,0 +1,79 @@
+---
+- name: Collect volume details on source_vserver
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    # Collect details from source_vserver
+    - name: Fetch list of volumes on source_vserver
+      uri:
+        url: "https://{{ source_host }}/api/storage/volumes?svm.name={{ source_vserver }}&fields=name,uuid"
+        method: GET
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: source_volumes_result
+      ignore_errors: true
+
+    - name: Debug source volume fetch results
+      debug:
+        var: source_volumes_result
+
+    - name: Extract source volume UUIDs and names, excluding 'root' and 'vsrv'
+      set_fact:
+        source_volumes: "{{ source_volumes_result.json.records | reject('search', 'root') | reject('search', 'vsrv') | list }}"
+
+    - name: Debug filtered source volumes
+      debug:
+        var: source_volumes
+
+    - name: Initialize list to store detailed source volume information
+      set_fact:
+        source_detailed_volumes: []
+
+    - name: Fetch detailed information for each source volume
+      uri:
+        url: "https://{{ source_host }}/api/storage/volumes/{{ item.uuid }}?fields=name,nas.path"
+        method: GET
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      loop: "{{ source_volumes }}"
+      loop_control:
+        loop_var: item
+      register: source_volume_details
+      ignore_errors: true
+
+    - name: Append detailed information to source volume list
+      set_fact:
+        source_detailed_volumes: >-
+          {{
+            source_detailed_volumes + [
+              {
+                'href': item.json._links.self.href,
+                'name': item.json.name,
+                'uuid': item.json.uuid,
+                'path': item.json.nas.path
+              }
+            ]
+          }}
+      loop: "{{ source_volume_details.results }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug detailed source volume information
+      debug:
+        var: source_detailed_volumes
+
+    - name: Store detailed source volume information in a file
+      copy:
+        content: |
+          volume_path:
+          {{ source_detailed_volumes | to_nice_yaml }}
+        dest: collected_source_volume_junction_path.yml

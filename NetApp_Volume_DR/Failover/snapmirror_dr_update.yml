@@ -1,0 +1,52 @@
+---
+- name: Initiate SnapMirror transfers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Load SnapMirror details from file
+      slurp:
+        src: collected_snapmirror_dr_status.yml
+      register: snapmirror_file
+
+    - name: Decode SnapMirror details from base64
+      set_fact:
+        snapmirror_data: "{{ snapmirror_file.content | b64decode | from_yaml }}"
+
+    - name: Extract SnapMirror details
+      set_fact:
+        snapmirror_details: "{{ snapmirror_data['SnapMirror Details'] }}"
+
+    - name: Debug loaded SnapMirror details
+      debug:
+        var: snapmirror_details
+
+    - name: Initiate SnapMirror transfers
+      uri:
+        url: "https://{{ target_host }}{{ item._links.self.href }}transfers"
+        method: POST
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        # body:
+          # The body can be left empty if no additional parameters are required
+        # body_format: json
+      loop: "{{ snapmirror_details }}"
+      register: transfer_results
+      ignore_errors: true
+
+    - name: Debug transfer results
+      debug:
+        var: transfer_results
+
+    - name: Store the results in dr_break.yml
+      copy:
+        content: |
+          SnapMirror Break Results:
+          {{ transfer_results | to_nice_yaml }}
+        dest: collected_snapmirror_dr_update.yml

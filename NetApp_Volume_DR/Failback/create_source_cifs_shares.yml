@@ -1,0 +1,61 @@
+---
+- name: Create CIFS shares on SVM2 using modified collected information
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  vars:
+    collected_cifs_share_target_to_source_file: "collected_cifs_share_target_to_source.yml"
+
+  tasks:
+    # Step 1: Load modified collected CIFS share details
+    - name: Load modified collected CIFS share details
+      include_vars:
+        file: "{{ collected_cifs_share_target_to_source_file }}"
+        name: collected_cifs_share_target_to_source_data
+
+    - name: Debug loaded CIFS share details for SVM2
+      debug:
+        var: collected_cifs_share_target_to_source_data
+
+    # Step 2: Create CIFS shares on SVM2
+    - name: Create CIFS shares on SVM2
+      uri:
+        url: "https://{{ source_host }}/api/protocols/cifs/shares/{{ item.svm.uuid }}"
+        method: POST
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        body_format: json
+        body: |
+          {
+            "name": "{{ item.name }}",
+            "path": "{{ item.path }}",
+            "acls": [
+              {% for acl_item in item.acls %}
+              {
+                "permission": "{{ acl_item.permission }}",
+                "type": "{{ acl_item.type }}",
+                "user_or_group": "{{ acl_item.user_or_group }}"
+              }
+              {% if not loop.last %},{% endif %}
+              {% endfor %}
+            ],
+            "svm.name": "{{ item.svm.name }}"
+          }
+        validate_certs: false
+      loop: "{{ collected_cifs_share_target_to_source_data.cifs_shares }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug created CIFS shares response
+      debug:
+        var: item.json
+
+    - name: Print source cifs share details to file
+      copy:
+        content: |
+          cifs share Details:
+          {{ item | to_nice_yaml }}
+        dest: collected_source_cifs_shares_details.yml

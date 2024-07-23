@@ -1,0 +1,41 @@
+---
+- name: Collect target CIFS Server Info
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Get UUID of target Vserver
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: no
+      register: target_vserver_info
+
+    - name: Set target_vserver UUID
+      set_fact:
+        target_vserver_uuid: "{{ target_vserver_info.json.records[0].uuid }}"
+    - name: Get CIFS server info from target Vserver
+      uri:
+        url: "https://{{ target_host }}/api/protocols/cifs/services/{{ target_vserver_info.json.records[0].uuid }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: no
+      register: target_svm_info
+
+    - name: Debug target SVM info
+      debug:
+        var: target_svm_info
+
+    - name: Save CIFS info to collected_target_cifs_server_info.yml
+      copy:
+        content: "{{ target_svm_info.json }}"
+        dest: collected_target_cifs_server_info.yml
