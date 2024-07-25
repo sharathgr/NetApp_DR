@@ -54,12 +54,21 @@ This Ansible playbook automates the disaster recovery (DR) process for NetApp vo
 
 - **create_dr_cifs_server.yml**
   - Creates a new CIFS server on the target SVM.
+    
+- **cifs_shares_remove_everyone.yml**
+  - Removes Everyone permissions from all CIFS Shares on the target SVM. 
 
 - **mount_target_volumes.yml**
   - Mounts volumes on the target SVM.
 
 - **create_dr_cifs_shares.yml**
-  - Creates CIFS shares on the target SVM.
+  - Creates CIFS shares and updates lm-compatibility-level to ntlmv2-krb on the target SVM.
+
+- **modify_target_volume.yml**
+  - Updats snapshot policy, tiering-policy, tiering-minimum-cooloing-days on the target SVM.
+
+- **collect_source_cifs_local_groups.yml**
+  - Collects cifs local-groups details from source SVM. 
 
 - **create_source_snapmirror.yml**
   - Sets up SnapMirror to replicate data from the source to the target SVM.
