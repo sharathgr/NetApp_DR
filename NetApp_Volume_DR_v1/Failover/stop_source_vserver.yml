@@ -1,0 +1,51 @@
+---
+- name: Manage source vserver operations
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Get the UUID of the source vserver
+      uri:
+        url: "https://{{ source_host }}/api/svm/svms?name={{ source_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: svm_info
+
+    - name: Debug SVM info
+      debug:
+        var: svm_info
+
+    - name: Set SVM UUID fact
+      set_fact:
+        source_svm_uuid: "{{ svm_info.json.records[0].uuid }}"
+        
+    - name: Stop source_vserver
+      uri:
+        url: "https://{{ source_host }}/api/svm/svms/{{ source_svm_uuid }}"
+        method: PATCH
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        body:
+          state: "stopped"
+        body_format: json
+        validate_certs: false
+      register: stop_vserver_response
+      ignore_errors: true
+
+    - name: Debug stop vserver response
+      debug:
+        var: stop_vserver_response
+
+    - name: Save operation details to file
+      copy:
+        content: |
+          stop_vserver_response: {{ stop_vserver_response | to_nice_yaml }}
+        dest: collected_stop_source_vserver.yml

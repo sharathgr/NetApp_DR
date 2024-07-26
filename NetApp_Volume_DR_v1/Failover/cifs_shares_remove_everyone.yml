@@ -1,0 +1,39 @@
+---
+- name: Create and Manage CIFS shares on SVM2
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  vars:
+    collected_cifs_share_source_to_dr_file: "collected_cifs_share_source_to_dr.yml"
+
+  tasks:
+    # Step 1: Load modified collected CIFS share details
+    - name: Load modified collected CIFS share details
+      include_vars:
+        file: "{{ collected_cifs_share_source_to_dr_file }}"
+        name: collected_cifs_share_source_to_dr_data
+
+    - name: Debug loaded CIFS share details for SVM2
+      debug:
+        var: collected_cifs_share_source_to_dr_data
+
+    # Step 3: Remove default "Everyone / Full Control" ACL from created shares
+    - name: Remove default ACL "Everyone / Full Control" from created shares
+      uri:
+        url: "https://{{ target_host }}/api/protocols/cifs/shares/{{ item.svm.uuid }}/{{ item.name }}/acls/Everyone/windows"
+        method: DELETE
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      loop: "{{ collected_cifs_share_source_to_dr_data.cifs_shares }}"
+      loop_control:
+        loop_var: item
+      register: acl_removal_result
+      ignore_errors: true
+
+    - name: Debug ACL removal response
+      debug:
+        var: acl_removal_result

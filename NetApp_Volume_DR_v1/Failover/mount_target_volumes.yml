@@ -1,0 +1,37 @@
+---
+- name: Collect volume details on source_vserver
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+    - collected_modify_target_mounts.yml
+
+  tasks:
+
+    - name: Mount volumes
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes/{{ item.uuid }}"
+        method: PATCH
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        body_format: json
+        body:
+          name: "{{ item.name }}"
+          nas.path: "{{ item.path }}"
+      loop: "{{ mount_details }}"
+      register: result
+
+    - name: Debug create results
+      debug:
+        var: result
+
+    - name: Store the results 
+      copy:
+        content: |
+          Target Mount Results:
+          {{ result | to_nice_yaml }}
+        dest: collected_mount_target_volumes.yml

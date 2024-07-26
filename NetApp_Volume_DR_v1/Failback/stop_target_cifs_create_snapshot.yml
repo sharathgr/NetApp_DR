@@ -1,0 +1,109 @@
+---
+- name: Manage target vserver operations
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Get the UUID of the target vserver
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: svm_info
+
+    - name: Debug SVM info
+      debug:
+        var: svm_info
+
+    - name: Set SVM UUID fact
+      set_fact:
+        target_svm_uuid: "{{ svm_info.json.records[0].uuid }}"
+        
+    - name: Get CIFS server details on target_vserver
+      uri:
+        url: "https://{{ target_host }}/api/protocols/cifs/services/{{ target_svm_uuid }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: cifs_details_response
+      ignore_errors: true
+
+    - name: Save CIFS server details to file
+      copy:
+        content: "{{ cifs_details_response | to_nice_yaml }}"
+        dest: cifs_server.yml
+
+    - name: Debug CIFS server details
+      debug:
+        var: cifs_details_response
+
+    - name: Stop CIFS server on target_vserver
+      uri:
+        url: "https://{{ target_host }}/api/protocols/cifs/services/{{ target_svm_uuid }}"
+        method: PATCH
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        body:
+          enabled: false
+        body_format: json
+        validate_certs: false
+      register: stop_cifs_response
+      ignore_errors: true
+
+    - name: Get list of volumes in target_vserver
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes?svm.name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: volumes_response
+
+    - name: Debug volumes response
+      debug:
+        var: volumes_response
+
+    - name: Create snapshot on each volume in target_vserver that doesn't contain 'root' or 'vsrv'
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes/{{ item.uuid }}/snapshots"
+        method: POST
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        body:
+          name: "DR_TEST_Failback"
+        body_format: json
+        validate_certs: false
+      with_items: "{{ volumes_response.json.records }}"
+      when: 
+        - "item.name is defined"
+        - "'root' not in item.name"
+        - "'vsrv' not in item.name"
+      loop_control:
+        loop_var: item
+      register: snapshot_responses
+      ignore_errors: true
+
+    - name: Debug snapshot responses
+      debug:
+        var: snapshot_responses
+
+    - name: Save operation details to file
+      copy:
+        content: |
+          cifs_details_response: {{ cifs_details_response | to_nice_yaml }}
+          stop_cifs_response: {{ stop_cifs_response | to_nice_yaml }}
+          volumes_response: {{ volumes_response | to_nice_yaml }}
+          snapshot_responses: {{ snapshot_responses | to_nice_yaml }}
+        dest: collected_stop_target_cifs_create_snapshot.yml

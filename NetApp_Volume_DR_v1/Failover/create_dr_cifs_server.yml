@@ -1,0 +1,52 @@
+---
+- name: Create CIFS Server on NetApp using REST API
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars_files:
+    - vars.yml
+    - collected_cifs_server_source_to_dr.yml
+
+  tasks:
+    - name: Read CIFS Server details from cifs_server_dr.yml
+      include_vars:
+        file: collected_cifs_server_source_to_dr.yml
+        name: dr_cifs_server_details
+
+    - name: Debug loaded CIFS Server details
+      debug:
+        var: dr_cifs_server_details
+
+    - name: Get UUID of Target Vserver
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: no
+      register: target_vserver_info
+
+    - name: Set target_vserver UUID
+      set_fact:
+        target_vserver_uuid: "{{ target_vserver_info.json.records[0].uuid }}"
+
+    - name: Target CIFS Server
+      uri:
+        url: "https://{{ target_host }}/api/protocols/cifs/services/{{ target_vserver_info.json.records[0].uuid }}"
+        method: POST
+        body_format: json
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        body:
+          name: "{{ dr_cifs_server_details.name }}"
+          ad_domain.fqdn: "{{ dr_cifs_server_details.ad_domain.fqdn }}"
+          ad_domain.organizational_unit: "{{ dr_cifs_server_details.ad_domain.organizational_unit }}"
+          ad_domain.user: "{{ ad_domain_user }}"
+          ad_domain.password: "{{ ad_domain_password }}"
+          security.lm_compatibility_level: "ntlmv2_krb"
+          comment: "{{ dr_cifs_server_details.comment }}"
+        force: true
+        validate_certs: no
+        status_code: 201

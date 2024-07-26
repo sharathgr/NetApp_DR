@@ -1,0 +1,62 @@
+---
+- name: Modify volumes on target_vserver
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Retrieve list of volumes on target_vserver
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: volumes_response
+
+    - name: Debug volumes response
+      debug:
+        var: volumes_response
+
+    - name: Extract volume UUIDs
+      set_fact:
+        volume_uuids: "{{ volumes_response.json.records | map(attribute='uuid') | list }}"
+
+    - name: Debug volume UUIDs
+      debug:
+        var: volume_uuids
+
+    - name: Modify each volume
+      uri:
+        url: "https://{{ target_host }}/api/storage/volumes/{{ item }}"
+        method: PATCH
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        body:
+          tiering:
+            policy: "all"
+          snapshot_policy:
+            name: "none"
+        body_format: json
+      loop: "{{ volume_uuids }}"
+      loop_control:
+        loop_var: item
+      register: modify_results
+      ignore_errors: true
+
+    - name: Debug modify results
+      debug:
+        var: modify_results
+
+    - name: Store the modify results
+      copy:
+        content: |
+          Volume Modify Results:
+          {{ modify_results | to_nice_yaml }}
+        dest: collected_modify_volumes.yml

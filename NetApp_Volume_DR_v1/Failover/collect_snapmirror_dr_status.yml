@@ -1,0 +1,71 @@
+---
+- name: Check SnapMirror status and health
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Login to target_host and check SnapMirror relationships
+      uri:
+        url: "https://{{ target_host }}/api/snapmirror/relationships?destination.svm.name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: target_snapmirror_relationships
+      ignore_errors: true
+
+    - name: Debug target SnapMirror relationships
+      debug:
+        var: target_snapmirror_relationships
+
+    - name: Extract UUIDs of SnapMirror relationships
+      set_fact:
+        snapmirror_uuids: "{{ target_snapmirror_relationships.json.records | map(attribute='uuid') | list }}"
+      when: target_snapmirror_relationships.status == 200  # Ensure the API call was successful
+
+    - name: Debug SnapMirror UUIDs
+      debug:
+        var: snapmirror_uuids
+
+    - name: Initialize list to store SnapMirror details
+      set_fact:
+        snapmirror_details: []
+
+    - name: Fetch SnapMirror details for each relationship
+      uri:
+        url: "https://{{ target_host }}/api/snapmirror/relationships/{{ item }}?fields=healthy,state,destination.path,source.path,source.svm.name,destination.svm.name"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: snapmirror_detail
+      loop: "{{ snapmirror_uuids }}"
+      loop_control:
+        loop_var: item
+      ignore_errors: true
+
+    - name: Append each SnapMirror detail to the list
+      set_fact:
+        snapmirror_details: "{{ snapmirror_details + [snapmirror_detail.json] }}"
+      loop: "{{ snapmirror_detail.results }}"
+      when: snapmirror_detail.status == 200
+      loop_control:
+        loop_var: snapmirror_detail
+
+    - name: Debug SnapMirror details list
+      debug:
+        var: snapmirror_details
+
+    - name: Print SnapMirror details to file
+      copy:
+        content: |
+          SnapMirror Details:
+          {{ snapmirror_details | to_nice_yaml }}
+        dest: collected_snapmirror_dr_status.yml
+

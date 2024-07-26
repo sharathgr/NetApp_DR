@@ -1,0 +1,62 @@
+---
+- name: Update SnapMirror relationships based on details
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Load SnapMirror details from file
+      slurp:
+        src: collected_snapmirror_source_status.yml
+      register: snapmirror_file
+
+    - name: Decode SnapMirror details from base64
+      set_fact:
+        snapmirror_data: "{{ snapmirror_file.content | b64decode | from_yaml }}"
+
+    - name: Extract SnapMirror details
+      set_fact:
+        snapmirror_details: "{{ snapmirror_data['SnapMirror Details'] }}"
+
+    - name: Debug loaded SnapMirror details
+      debug:
+        var: snapmirror_details
+
+    - name: Extract UUIDs of created SnapMirror relationships
+      set_fact:
+        snapmirror_uuids: "{{ snapmirror_details | map(attribute='uuid') | list }}"
+
+    - name: Debug SnapMirror UUIDs
+      debug:
+        var: snapmirror_uuids
+
+    - name: Update each SnapMirror relationship
+      uri:
+        url: "https://{{ source_host }}/api/snapmirror/relationships/{{ item }}"
+        method: PATCH
+        headers:
+          Authorization: "Basic {{ (username + ':' + password) | b64encode }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        body:
+          state: "snapmirrored"
+        body_format: json
+      loop: "{{ snapmirror_uuids }}"
+      loop_control:
+        loop_var: item
+      register: update_results
+      ignore_errors: true
+
+    - name: Debug update results
+      debug:
+        var: update_results
+
+    - name: Store the update results
+      copy:
+        content: |
+          SnapMirror Update Results:
+          {{ update_results | to_nice_yaml }}
+        dest: collected_update_snapmirror_source.yml

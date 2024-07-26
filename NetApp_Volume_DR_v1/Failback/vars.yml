@@ -1,0 +1,12 @@
+source_host: "192.168.0.101"
+target_host: "192.168.0.102"
+source_vserver: "svm1_cluster1"
+target_vserver: "dr_svm"
+username: "admin"
+password: "Netapp1!"
+auth_header: "Basic {{ (username + ':' + password) | b64encode }}"
+
+ad_domain_user: sharath
+ad_domain_password: NetApp@123
+ad_domain: demo.netapp.com
+spn_dns_name: CIFS1

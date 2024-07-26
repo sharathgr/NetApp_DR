@@ -1,0 +1,51 @@
+---
+- name: Create CIFS Server target Info
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Get UUID of target vserver
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: target_svm_info
+
+    - name: Debug target SVM info
+      debug:
+        var: target_svm_info
+
+    - name: Get UUID of target vserver
+      uri:
+        url: "https://{{ target_host }}/api/svm/svms?name={{ target_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: target_svm_info
+
+    - name: Debug target SVM info
+      debug:
+        var: target_svm_info
+
+    - name: Copy contents of collected_target_cifs_server_info.yml to collected_cifs_server_target_to_source.yml
+      command: "cp collected_target_cifs_server_info.yml collected_cifs_server_target_to_source.yml"
+      args:
+        creates: "collected_cifs_server_target_to_source.yml"
+
+    - name: Replace target vserver UUID with target vserver UUID in collected_cifs_server_target_to_source.yml
+      replace:
+        path: "collected_cifs_server_target_to_source.yml"
+        regexp: "{{ target_svm_info.json.records[0].uuid }}"
+        replace: "{{ target_svm_info.json.records[0].uuid }}"
+
+    - name: Display updated collected_cifs_server_target_to_source.yml
+      command: "cat collected_cifs_server_target_to_source.yml"

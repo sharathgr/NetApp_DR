@@ -1,0 +1,46 @@
+---
+- name: Retrieve and Update CIFS Local Groups
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars.yml
+
+  tasks:
+
+    # Step 1: Get UUID of source vServer
+    - name: Get UUID of Source vServer
+      uri:
+        url: "https://{{ source_host }}/api/svm/svms?name={{ source_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: source_vserver_info
+
+    - name: Set source vServer UUID
+      set_fact:
+        source_vserver_uuid: "{{ source_vserver_info.json.records[0].uuid }}"
+
+    # Step 2: Update CIFS local groups on source vServer
+    - name: Update CIFS local groups on source vServer
+      uri:
+        url: "https://{{ source_host }}/api/protocols/cifs/local-groups/{{ source_vserver_uuid }}"
+        method: GET  # Adjust the method as per your update API endpoint requirements (e.g., POST, PUT)
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: update_local_groups_response
+
+    # Step 3: Debug the update_local_groups_response
+    - name: Debug update_local_groups_response
+      debug:
+        var: update_local_groups_response
+
+    # Step 4: Store retrieved data in YAML file
+    - name: Store CIFS Local Groups data in YAML file
+      copy:
+        content: "{{ update_local_groups_response.json | to_nice_yaml }}"
+        dest: collected_cifs_local_groups_source.yml

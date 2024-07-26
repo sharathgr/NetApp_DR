@@ -1,0 +1,79 @@
+---
+- name: Collect CIFS share details from SVM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Get the UUID of the source vserver
+      uri:
+        url: "https://{{ source_host }}/api/svm/svms?name={{ source_vserver }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: svm_info
+
+    - name: Debug SVM info
+      debug:
+        var: svm_info
+
+    - name: Set SVM UUID fact
+      set_fact:
+        svm_uuid: "{{ svm_info.json.records[0].uuid }}"
+
+    - name: Get CIFS shares from the vserver
+      uri:
+        url: "https://{{ source_host }}/api/protocols/cifs/shares?svm.uuid={{ svm_uuid }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: cifs_shares
+
+    - name: Debug CIFS shares
+      debug:
+        var: cifs_shares
+
+    - name: Filter out system shares
+      set_fact:
+        user_cifs_shares: "{{ cifs_shares.json.records | rejectattr('name', 'in', ['c$', 'ipc$']) | list }}"
+
+    - name: Debug user CIFS shares
+      debug:
+        var: user_cifs_shares
+
+    - name: Get details for each CIFS share
+      uri:
+        url: "https://{{ source_host }}/api/protocols/cifs/shares/{{ svm_uuid }}/{{ item.name }}"
+        method: GET
+        headers:
+          Authorization: "{{ auth_header }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: cifs_share_details
+      loop: "{{ user_cifs_shares }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug CIFS share details
+      debug:
+        var: cifs_share_details
+
+    - name: Collect CIFS share details
+      set_fact:
+        collected_cifs_shares: "{{ collected_cifs_shares | default([]) + [item.json] }}"
+      loop: "{{ cifs_share_details.results }}"
+      loop_control:
+        loop_var: item
+
+    - name: Save collected CIFS share details
+      copy:
+        content: |
+          cifs_shares:
+          {{ collected_cifs_shares | to_nice_yaml }}
+        dest: collected_cifs_shares.yml
