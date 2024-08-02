@@ -35,12 +35,6 @@
     - name: Initialize list to store detailed source volume information
       set_fact:
         source_detailed_volumes: []
-
-    - name: Ensure destination directory exists
-      file:
-        path: /tmp/test1
-        state: directory
-      delegate_to: 192.168.0.188
       
     - name: Fetch detailed information for each source volume
       uri:
@@ -81,12 +75,5 @@
       copy:
         content: |
           volume_path:
-          { source_detailed_volumes | to_nice_yaml }
-        dest: /tmp/test1/collected_source_volume_junction_path.yml
-      delegate_to: 192.168.0.188
-    # - name: Store detailed source volume information in a file
-    #   copy:
-    #     content: |
-    #       volume_path:
-    #       {{ source_detailed_volumes | to_nice_yaml }}
-    #     dest: collected_source_volume_junction_path.yml
+          {{ source_detailed_volumes | to_nice_yaml }}
+        dest: collected_source_volume_junction_path.yml
