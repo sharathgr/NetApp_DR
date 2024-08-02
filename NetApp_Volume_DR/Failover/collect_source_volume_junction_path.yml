@@ -70,6 +70,11 @@
     - name: Debug detailed source volume information
       debug:
         var: source_detailed_volumes
+    - name: Ensure destination directory exists
+      file:
+        path: /tmp/test1
+        state: directory
+      delegate_to: 192.168.0.188
     - name: Store detailed source volume information in a file
       copy:
         content: |
