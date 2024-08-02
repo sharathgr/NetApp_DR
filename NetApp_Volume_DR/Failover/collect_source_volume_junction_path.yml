@@ -36,6 +36,12 @@
       set_fact:
         source_detailed_volumes: []
 
+    - name: Ensure destination directory exists
+      file:
+        path: /tmp/test1
+        state: directory
+      delegate_to: 192.168.0.188
+      
     - name: Fetch detailed information for each source volume
       uri:
         url: "https://{{ source_host }}/api/storage/volumes/{{ item.uuid }}?fields=name,nas.path"
