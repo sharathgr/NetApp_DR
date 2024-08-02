@@ -35,7 +35,7 @@
     - name: Initialize list to store detailed source volume information
       set_fact:
         source_detailed_volumes: []
-      
+
     - name: Fetch detailed information for each source volume
       uri:
         url: "https://{{ source_host }}/api/storage/volumes/{{ item.uuid }}?fields=name,nas.path"
@@ -70,7 +70,7 @@
     - name: Debug detailed source volume information
       debug:
         var: source_detailed_volumes
-      
+
     - name: Store detailed source volume information in a file
       copy:
         content: |
